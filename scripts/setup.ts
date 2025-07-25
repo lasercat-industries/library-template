@@ -1,5 +1,5 @@
 #!/usr/bin/env bun
-import { readFileSync, writeFileSync, existsSync, rmSync, mkdirSync, readdirSync } from 'fs';
+import { readFileSync, writeFileSync, existsSync, rmSync, readdirSync } from 'fs';
 import { join } from 'path';
 
 const colors = {
@@ -52,6 +52,7 @@ async function main() {
 
   packageJson.name = `@lasercat/${packageName}`;
   packageJson.author = authorName;
+  packageJson.version = '1.0.0';
 
   // Remove postinstall script
   if (packageJson.scripts?.postinstall) {
@@ -61,61 +62,45 @@ async function main() {
   writeFileSync(packageJsonPath, JSON.stringify(packageJson, null, 2) + '\n');
   console.log(`${colors.green}✅${colors.reset} Updated package.json`);
 
-  // Create GitHub Actions workflow if user wants npm publishing
-  if (publishToNpm) {
-    const workflowDir = join(process.cwd(), '.github', 'workflows');
-    const workflowPath = join(workflowDir, 'release.yml');
+  // Modify existing GitHub Actions workflow based on npm publishing choice
+  const workflowPath = join(process.cwd(), '.github', 'workflows', 'ci-publish.yml');
+  if (existsSync(workflowPath)) {
+    let workflowContent = readFileSync(workflowPath, 'utf-8');
 
-    // Create .github/workflows directory if it doesn't exist
-    if (!existsSync(workflowDir)) {
-      mkdirSync(workflowDir, { recursive: true });
+    if (!publishToNpm) {
+      // Remove the npm publish step
+      const lines = workflowContent.split('\n');
+      const modifiedLines: string[] = [];
+      let skipNextLines = 0;
+
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        if (!line) continue;
+
+        if (skipNextLines > 0) {
+          skipNextLines--;
+          continue;
+        }
+
+        // Skip the publish step and its associated lines
+        if (line.includes('- name: Publish to npm')) {
+          // Skip this line and the next 4 lines (if, env, run)
+          skipNextLines = 4;
+          continue;
+        }
+
+        modifiedLines.push(line);
+      }
+
+      workflowContent = modifiedLines.join('\n');
+      writeFileSync(workflowPath, workflowContent);
+      console.log(`${colors.green}✅${colors.reset} Removed npm publishing from CI workflow`);
+    } else {
+      console.log(`${colors.green}✅${colors.reset} Kept npm publishing in CI workflow`);
+      console.log(
+        `${colors.yellow}⚠${colors.reset}  Remember to add NPM_TOKEN secret to your GitHub repository`,
+      );
     }
-
-    const workflowContent = `name: Release
-
-on:
-  push:
-    branches:
-      - main
-  workflow_dispatch:
-
-jobs:
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: oven-sh/setup-bun@v2
-      - run: bun install
-      - run: bun test
-      - run: bun run lint
-      - run: bun run typecheck
-      - run: bun run build
-
-  publish:
-    needs: test
-    runs-on: ubuntu-latest
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          registry-url: 'https://registry.npmjs.org'
-      - uses: oven-sh/setup-bun@v2
-      - run: bun install
-      - run: bun run build
-      - run: npm publish --access public
-        env:
-          NODE_AUTH_TOKEN: \${{ secrets.NPM_TOKEN }}
-`;
-
-    writeFileSync(workflowPath, workflowContent);
-    console.log(
-      `${colors.green}✅${colors.reset} Created GitHub Actions workflow for npm publishing`,
-    );
-    console.log(
-      `${colors.yellow}⚠${colors.reset}  Remember to add NPM_TOKEN secret to your GitHub repository`,
-    );
   }
 
   // Clean up setup files
