@@ -36,6 +36,7 @@
   },
   "homepage": "https://github.com/lasercat-industries/library-template#readme",
   "scripts": {
+    "postinstall": "bun run scripts/setup.ts",
     "prebuild": "bun run clean",
     "build": "bunx tsc -p tsconfig.build.json && bun run scripts/build.ts",
     "postbuild": "bun run build:validate",
