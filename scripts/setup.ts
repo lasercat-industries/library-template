@@ -2,6 +2,12 @@
 import { readFileSync, writeFileSync, existsSync, rmSync, readdirSync } from 'fs';
 import { join } from 'path';
 
+// Skip setup in CI environments
+if (process.env.CI || process.env.GITHUB_ACTIONS) {
+  console.log('Skipping setup in CI environment');
+  process.exit(0);
+}
+
 const colors = {
   reset: '\x1b[0m',
   bright: '\x1b[1m',
